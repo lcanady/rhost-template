@@ -11,28 +11,35 @@ new RhostMUSH project starts with the same structure.
 - Node.js 20+
 - npm
 - Docker (for `npm test`)
+- [Claude Code](https://claude.ai/code) with [mush-skills](https://github.com/lcanady/mush-skills) installed
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Copy this template
+# 1. Install Claude Code skills (once per machine)
+git clone https://github.com/lcanady/mush-skills ~/.claude/skills/mush-skills-repo
+cd ~/.claude/skills/mush-skills-repo && ./install.sh
+# Restart Claude Code
+
+# 2. Use this template on GitHub → "Use this template" button
+#    or copy locally:
 cp -r rhost-template my-new-game
 cd my-new-game
 
-# 2. Install dependencies
+# 3. Install Node dependencies
 npm install
 
-# 3. Configure environment
+# 4. Configure environment
 cp .env.example .env
 # Edit .env with your server details (only needed for manual installs)
 
-# 4. Build the installer
+# 5. Build the installer
 npm run build
 # → writes dist/installer.txt
 
-# 5. Run tests (requires Docker)
+# 6. Run tests (requires Docker)
 npm test
 ```
 

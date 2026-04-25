@@ -402,6 +402,14 @@ caused by illegal characters in the attr name.
 
 ## Skills Available
 
+Skills are sourced from [lcanady/mush-skills](https://github.com/lcanady/mush-skills).
+Pinned versions are in `skills-lock.json`. Install with:
+
+```bash
+git clone https://github.com/lcanady/mush-skills ~/.claude/skills/mush-skills-repo
+cd ~/.claude/skills/mush-skills-repo && ./install.sh
+```
+
 These Claude Code skills are available for RhostMUSH work:
 
 | Skill | Use for |
