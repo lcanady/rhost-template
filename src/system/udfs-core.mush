@@ -1,0 +1,8 @@
+@@ ===========================================================================
+@@ udfs-core.mush — Core user-defined functions
+@@ Add UDFs here. All attrs use _COR_ prefix for internal/hidden state.
+@@ ===========================================================================
+
+@@ Example UDF — replace with your own.
+@@ Convention: F.<VERB>.<NOUN> for functions, CMD.<VERB> for commands.
+& F.VERSION My System <sys>=0.1.0

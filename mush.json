@@ -1,0 +1,11 @@
+{
+  "name": "@mushpkg/rhost-template",
+  "version": "0.1.0",
+  "description": "RhostMUSH softcode project template",
+  "main": "dist/installer.txt",
+  "tags": ["rhostmush", "template"],
+  "server": "rhostmush",
+  "namespace": "tmpl",
+  "dependencies": {},
+  "registry": "https://registry.mushpkg.dev"
+}

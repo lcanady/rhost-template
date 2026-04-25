@@ -1,0 +1,21 @@
+{
+  "name": "rhost-template",
+  "version": "0.1.0",
+  "description": "RhostMUSH softcode project template",
+  "scripts": {
+    "build":         "ts-node tools/build.ts",
+    "test":          "ts-node tests/run.ts",
+    "test:security": "ts-node tests/security/all.ts",
+    "mush:install":  "ts-node tools/mush-install.ts",
+    "mush:publish":  "echo 'TODO: mush publish not yet implemented'",
+    "showcase":      "ts-node tools/showcase.ts"
+  },
+  "dependencies": {
+    "@rhost/testkit": "^1.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "ts-node": "latest",
+    "typescript": "latest"
+  }
+}

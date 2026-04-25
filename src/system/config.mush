@@ -1,0 +1,24 @@
+@@ ===========================================================================
+@@ config.mush — Project configuration and object creation.
+@@ This file MUST run first (it creates the objects everything else references).
+@@
+@@ Namespace convention:
+@@   Object names use format:  Human Name <ns.tag>
+@@   where "ns"  = the "namespace" field from mush.json  (e.g. "cg", "bbs")
+@@         "tag" = short role label                       (e.g. "sys", "data")
+@@
+@@   Example for namespace "cg":
+@@     @create Chargen System <cg.sys>
+@@     @create Chargen Data   <cg.data>
+@@
+@@   Tests look up objects with: search(name=Chargen System <cg.sys>)
+@@   Never hardcode a dbref — always use search() by name.
+@@ ===========================================================================
+
+@@ Rename "My System" and "tmpl" to match your mush.json name/namespace.
+@create My System <tmpl.sys>
+@set My System <tmpl.sys>=INHERIT SAFE
+
+& VERSION     My System <tmpl.sys>=0.1.0
+& DESCRIPTION My System <tmpl.sys>=Base system template.
+& NAMESPACE   My System <tmpl.sys>=tmpl
