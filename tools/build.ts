@@ -10,58 +10,59 @@ import { validateManifestEntry } from './validate';
 const ROOT    = path.join(__dirname, '..');
 const SRC     = path.join(ROOT, 'src');
 const TOOLS   = __dirname;
-const DIST    = path.join(ROOT, 'dist');
 const DEPS    = path.join(ROOT, 'deps');
 
 // ---------------------------------------------------------------------------
-// Package manifests
+// Config types
 // ---------------------------------------------------------------------------
 
+interface InstallerConfig {
+  name:         string;
+  description?: string;
+  out:          string;    // relative to ROOT e.g. "dist/installer.txt"
+  manifest:     string[];  // same entry rules: "file.mush", "dir/", "script.ts", "script.js"
+}
+
 interface MushJson {
-  name: string;
-  version: string;
-  namespace?: string;
+  name:          string;
+  version:       string;
+  namespace?:    string;
   dependencies?: Record<string, string>;
+  installers?:   InstallerConfig[];
 }
 
 interface LockEntry {
-  version: string;
+  version:  string;
   resolved: string;
-  sha256: string;
+  sha256:   string;
 }
 
 interface LockFile {
   lockVersion: number;
-  resolved: Record<string, LockEntry>;
+  resolved:    Record<string, LockEntry>;
 }
 
-const pkg      = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))  as { name: string; version: string };
-const mushJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'mush.json'), 'utf8'))     as MushJson;
+// ---------------------------------------------------------------------------
+// Load config
+// ---------------------------------------------------------------------------
+
+const pkg      = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'),   'utf8')) as { name: string; version: string };
+const mushJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'mush.json'),      'utf8')) as MushJson;
 const lockFile = JSON.parse(fs.readFileSync(path.join(ROOT, 'mush-lock.json'), 'utf8')) as LockFile;
 
 // ---------------------------------------------------------------------------
-// Build manifest — ordered list of THIS project's source files.
-//
-//   "file.mush"   single softcode file compiled to single-line commands
-//   "dir/"        all *.mush files in src/dir/, sorted alphabetically, compiled
-//   "script.ts"   executed via ts-node; stdout appended as-is
-//   "script.js"   executed via node; stdout appended as-is
-//
-// Dependency installers are automatically prepended BEFORE this manifest
-// based on mush.json → "dependencies" and mush-lock.json resolution.
-// Run `npm run mush:install` to fetch deps into deps/ before building.
+// CLI flags
+//   --only <name>   build a single named installer
+//   --list          print installer names and exit
 // ---------------------------------------------------------------------------
 
-const MANIFEST: string[] = [
-  'header.js',
-  'system/',   // src/system/*.mush in alpha order
-  'post.js',
-];
+const onlyIdx    = process.argv.indexOf('--only');
+const onlyFilter = onlyIdx >= 0 ? process.argv[onlyIdx + 1] : null;
 
-// The output file MUST always be dist/installer.txt.
-// This path is the standard contract across all projects using this template
-// and is required by the package registry and test runner.
-const OUT_FILE = 'installer.txt';
+if (process.argv.includes('--list')) {
+  (mushJson.installers ?? []).forEach(i => console.log(i.name));
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // Compiler — collapses pretty-printed multi-line attrs to installer format.
@@ -119,92 +120,114 @@ function resolveFiles(entry: string): string[] {
 function processFile(file: string): string {
   const ext = path.extname(file);
   if (ext === '.mush') return compileMush(fs.readFileSync(file, 'utf8'));
-  // Use execFileSync (no shell) to prevent command injection via file paths.
-  // Arguments are passed as an array — metacharacters are never interpreted.
+  // execFileSync avoids shell injection — args passed as array, not string.
   if (ext === '.ts')   return execFileSync('npx', ['ts-node', file], { encoding: 'utf8' });
   if (ext === '.js')   return execFileSync('node', [file],           { encoding: 'utf8' });
   throw new Error(`build: unknown file type — ${file}`);
 }
 
 // ---------------------------------------------------------------------------
-// Dependency resolution — reads mush-lock.json, prepends dep installers
+// Dependency resolution — prepends locked dep installers in declared order.
+// Only applied to the installer named "main" (deps are not repeated in
+// supplementary installers like "portal" or "bridge").
 // ---------------------------------------------------------------------------
 
 function loadDependencyInstallers(): { label: string; content: string }[] {
-  const deps   = mushJson.dependencies ?? {};
-  const names  = Object.keys(deps);
+  const deps  = mushJson.dependencies ?? {};
+  const names = Object.keys(deps);
   if (names.length === 0) return [];
 
-  const out: { label: string; content: string }[] = [];
-
-  for (const name of names) {
+  return names.map(name => {
     const lock = lockFile.resolved[name];
     if (!lock) {
       throw new Error(
-        `Dependency "${name}" is declared in mush.json but not resolved in mush-lock.json.\n` +
-        `Run \`npm run mush:install\` to fetch it.`
+        `Dependency "${name}" declared in mush.json but not in mush-lock.json.\n` +
+        `Run \`npm run mush:install\` to resolve it.`
       );
     }
-
     const safeDir = name.replace(/\//g, '__');
     const depPath = path.join(DEPS, safeDir, lock.version, 'installer.txt');
-
     if (!fs.existsSync(depPath)) {
       throw new Error(
-        `Dependency "${name}@${lock.version}" is locked but not present at:\n  ${depPath}\n` +
+        `Dependency "${name}@${lock.version}" locked but missing at:\n  ${depPath}\n` +
         `Run \`npm run mush:install\` to re-fetch it.`
       );
     }
-
-    const raw = fs.readFileSync(depPath, 'utf8');
-    out.push({ label: `dep:${name}@${lock.version}`, content: raw });
     console.log(`  dep  ${name}@${lock.version}`);
+    return { label: `dep:${name}@${lock.version}`, content: fs.readFileSync(depPath, 'utf8') };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Build one installer
+// ---------------------------------------------------------------------------
+
+function buildInstaller(installer: InstallerConfig, deps: { label: string; content: string }[]): void {
+  const outPath = path.join(ROOT, installer.out);
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+
+  const fileHeader = [
+    '@@ ===========================================================================',
+    `@@ ${mushJson.name ?? pkg.name}${installer.description ? ' — ' + installer.description : ''}`,
+    `@@ Version   : ${mushJson.version ?? pkg.version}`,
+    `@@ Namespace : ${mushJson.namespace ?? '(none)'}`,
+    `@@ Built     : ${new Date().toISOString()}`,
+    '@@ ===========================================================================',
+  ].join('\n');
+
+  const sections: string[] = [fileHeader];
+
+  // Prepend dependency installers only for the "main" installer.
+  if (installer.name === 'main') {
+    for (const { content } of deps) sections.push(content);
   }
 
-  return out;
+  for (const entry of installer.manifest) {
+    for (const file of resolveFiles(entry)) {
+      const label  = path.relative(ROOT, file);
+      const result = processFile(file);
+      if (result.trim()) {
+        sections.push(result);
+        console.log(`  ok   ${label}`);
+      } else {
+        console.log(`  skip ${label}  (empty)`);
+      }
+    }
+  }
+
+  const outRelative = path.relative(ROOT, outPath);
+  fs.writeFileSync(outPath, sections.join('\n') + '\n');
+  const bytes = fs.statSync(outPath).size;
+  console.log(`\n  wrote ${outRelative}  (${bytes} bytes)\n`);
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-const header = [
-  '@@ ===========================================================================',
-  `@@ ${mushJson.name ?? pkg.name} — Installer`,
-  `@@ Version   : ${mushJson.version ?? pkg.version}`,
-  `@@ Namespace : ${mushJson.namespace ?? '(none)'}`,
-  `@@ Built     : ${new Date().toISOString()}`,
-  '@@ ===========================================================================',
-].join('\n');
+const installers = mushJson.installers ?? [];
+
+if (installers.length === 0) {
+  console.error('build: no "installers" array found in mush.json.');
+  console.error('       Add at least one installer entry to mush.json to build.');
+  process.exit(1);
+}
+
+const targets = onlyFilter
+  ? installers.filter(i => i.name === onlyFilter)
+  : installers;
+
+if (onlyFilter && targets.length === 0) {
+  const available = installers.map(i => i.name).join(', ');
+  console.error(`build: no installer named "${onlyFilter}". Available: ${available}`);
+  process.exit(1);
+}
 
 console.log(`\n${mushJson.name ?? pkg.name} — build v${mushJson.version ?? pkg.version}\n`);
 
-fs.mkdirSync(DIST, { recursive: true });
+const depSections = loadDependencyInstallers();
 
-const sections: string[] = [header];
-
-// Prepend dependency installers in declared order
-const depInstallers = loadDependencyInstallers();
-for (const { label, content } of depInstallers) {
-  sections.push(content);
-  console.log(`  ok   ${label}`);
+for (const installer of targets) {
+  console.log(`--- ${installer.name}${installer.description ? ': ' + installer.description : ''} ---`);
+  buildInstaller(installer, depSections);
 }
-
-// Compile this project's own sources
-for (const entry of MANIFEST) {
-  for (const file of resolveFiles(entry)) {
-    const label  = path.relative(ROOT, file);
-    const result = processFile(file);
-    if (result.trim()) {
-      sections.push(result);
-      console.log(`  ok   ${label}`);
-    } else {
-      console.log(`  skip ${label}  (empty)`);
-    }
-  }
-}
-
-const outPath = path.join(DIST, OUT_FILE);
-fs.writeFileSync(outPath, sections.join('\n') + '\n');
-const bytes = fs.statSync(outPath).size;
-console.log(`\n  wrote dist/${OUT_FILE}  (${bytes} bytes)\n`);

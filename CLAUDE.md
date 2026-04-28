@@ -241,9 +241,32 @@ Entries ending in `/` include all `*.mush` files in that directory, sorted alpha
 
 ## Testing
 
+> **DEFAULT: Use focused testing. Full suite only when needed.**
+> `npm test` spins up a full Docker container, installs the entire codebase, and runs every
+> suite — it takes a long time. Always use `npm run test:focus` during development.
+> Reserve `npm test` for pre-commit final verification or CI.
+
 ```bash
-npm test               # Start Docker container, install, run all suites
+# PREFERRED — fast, targeted, only compiles what the suite needs
+npm run test:focus -- chargen.test.ts
+
+# Multiple suites at once
+npm run test:focus -- chargen.test.ts combat.test.ts
+
+# Dry-run: see what source dirs would be compiled, no container started
+npm run test:focus -- --dry-run chargen.test.ts
+
+# FULL SUITE — slow, use only before committing or in CI
+npm test
 ```
+
+The focused runner (`tools/focus.ts`) works by:
+1. Parsing each test file for `search(name=...)` object lookups
+2. Grepping all `.mush` source files for matching `@create` commands
+3. Building a minimal `dist/focus-installer.txt` from only those source directories
+4. Spinning up a single-account container and running only the specified suites
+
+No manual configuration needed — the test's own object lookups drive what gets compiled.
 
 The test runner (`tests/run.ts`):
 1. Pulls `lcanady/rhostmush:latest` and starts a container
@@ -396,7 +419,7 @@ caused by illegal characters in the attr name.
 4. Add `'<systemname>/'` to `MANIFEST` in `tools/build.ts` at the right position
 5. Add test suite `tests/<systemname>.test.ts`
 6. Add the suite to `WAVES` in `tests/run.ts`
-7. Run `npm run build && npm test`
+7. Run `npm run test:focus -- <systemname>.test.ts` (full suite only before final commit)
 
 ---
 
@@ -431,17 +454,53 @@ These Claude Code skills are available for RhostMUSH work:
 
 ## Common Commands
 
+### Build & deps
 ```bash
-npm run mush:install   # Fetch softcode dependencies into deps/
-npm run build          # Compile deps + .mush sources → dist/installer.txt
-npm test               # Full test run (Docker required — builds first)
+npm run build                                # Compile deps + .mush sources → dist/installer.txt
+npm run mush:install                         # Fetch softcode dependencies into deps/
 ```
 
-Manual install (no Docker):
+### Testing
 ```bash
-# 1. Connect to your RhostMUSH server as Wizard
-# 2. Paste contents of dist/installer.txt line by line
-# 3. @shutdown/reboot
+npm run test:focus -- <suite.test.ts>        # PREFERRED: targeted (see Testing section above)
+npm run test:focus -- --dry-run <suite>      # Preview source dirs, no container
+npm test                                     # Full suite — slow, pre-commit / CI only
+```
+
+### Code quality (offline — no server needed)
+```bash
+npm run lint                                 # Static analysis: bare input, dead attrs, length budgets
+npm run lint:strict                          # Lint + exit 1 on warnings too
+npm run validate                             # Validate every .mush file for syntax/arg-count errors
+npm run fmt                                  # Auto-format all .mush files
+npm run fmt:check                            # Check formatting, exit 1 if any file needs changes
+```
+
+### Dev workflow (persistent container)
+```bash
+npm run dev                                  # Start persistent container, install code, keep running
+npm run dev -- --no-install                  # Start container without re-installing
+# Then in a second terminal:
+npx rhost-testkit watch                      # Re-run all tests on save (uses .env.local)
+npx rhost-testkit watch tests/chargen.test.ts  # Watch a specific suite
+```
+
+### Scaffolding
+```bash
+npm run new:system -- <name>                 # Scaffold src/<name>/, test, and wire into manifest
+npm run new:system -- chargen "Chargen System"  # With explicit display name
+```
+
+### Deploy to live server
+```bash
+npm run deploy:live                          # Deploy dist/installer.txt to RHOST_HOST (reads .env)
+npm run deploy:live -- --dry-run             # Parse + count commands, no connect
+```
+
+### CI setup
+```bash
+npx rhost-testkit init --ci github           # Generate .github/workflows/mush-tests.yml
+npx rhost-testkit init --ci gitlab           # Generate .gitlab-ci.yml
 ```
 
 ---

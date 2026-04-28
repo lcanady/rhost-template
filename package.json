@@ -6,9 +6,19 @@
     "build":         "ts-node tools/build.ts",
     "test":          "ts-node tests/run.ts",
     "test:security": "ts-node tests/security/all.ts",
+    "test:focus":    "ts-node tools/focus.ts",
     "mush:install":  "ts-node tools/mush-install.ts",
     "mush:publish":  "echo 'TODO: mush publish not yet implemented'",
-    "showcase":      "ts-node tools/showcase.ts"
+    "showcase":      "ts-node tools/showcase.ts",
+    "lint":          "find src -name '*.mush' -print0 | xargs -0 npx rhost-testkit lint",
+    "lint:strict":   "find src -name '*.mush' -print0 | xargs -0 npx rhost-testkit lint --strict",
+    "validate":      "find src -name '*.mush' | while read f; do npx rhost-testkit validate --file \"$f\" || exit 1; done",
+    "fmt":           "find src -name '*.mush' -print0 | xargs -0 npx rhost-testkit fmt",
+    "fmt:check":     "find src -name '*.mush' -print0 | xargs -0 npx rhost-testkit fmt --check",
+    "watch":         "npx rhost-testkit watch",
+    "dev":           "ts-node tools/dev.ts",
+    "deploy:live":   "ts-node tools/deploy.ts",
+    "new:system":    "ts-node tools/new-system.ts"
   },
   "dependencies": {
     "@rhost/testkit": "^1.5.3"

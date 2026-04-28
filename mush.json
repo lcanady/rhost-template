@@ -7,5 +7,18 @@
   "server": "rhostmush",
   "namespace": "tmpl",
   "dependencies": {},
-  "registry": "https://registry.mushpkg.dev"
+  "showcases": [],
+  "registry": "https://registry.mushpkg.dev",
+  "installers": [
+    {
+      "name": "main",
+      "description": "Main softcode installer",
+      "out": "dist/installer.txt",
+      "manifest": [
+        "header.js",
+        "system/",
+        "post.js"
+      ]
+    }
+  ]
 }

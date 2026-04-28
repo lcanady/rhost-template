@@ -53,12 +53,15 @@ my-project/
 │   └── system/             # Core system files
 │       ├── config.mush     # Object creation — ALWAYS runs first
 │       └── udfs-core.mush  # Core UDFs
+├── showcases/              # Showcase JSON files (one per feature demo)
+│   └── example.json        # Copy this to add a new showcase section
 ├── tests/                  # TypeScript test suites (@rhost/testkit)
 │   ├── run.ts              # Master test runner (Docker + wave execution)
 │   ├── helpers.ts          # Shared helpers (createThing, createRoom, etc.)
 │   └── example.test.ts     # Starter suite — copy to add new tests
 ├── tools/                  # Build tooling
 │   ├── build.ts            # Compiles .mush → dist/installer.txt
+│   ├── showcase.ts         # Interactive showcase runner
 │   ├── header.js           # Installer header (think/ansi lines)
 │   └── post.js             # Installer footer
 ├── dist/                   # Compiled output (gitignored)
@@ -69,6 +72,7 @@ my-project/
 ├── .env                    # Local credentials (never commit)
 ├── .env.example            # Committed env template
 ├── CLAUDE.md               # Claude Code instructions for this project
+├── mush.json               # Softcode package manifest
 ├── package.json
 └── tsconfig.json
 ```
@@ -125,9 +129,16 @@ npm run mush:install   # fetch deps first (if any)
 npm run build
 ```
 
-Compiles all `.mush` files listed in `tools/build.ts → MANIFEST` into a single
-`dist/installer.txt`. Dependency installers are automatically prepended before
-your own source files. Load order is explicit — edit `MANIFEST` to control it.
+Compiles all `.mush` files listed in `mush.json → installers[].manifest` into a single
+`dist/installer.txt`. Multiple named installers are supported — use `--only <name>` to
+build one:
+
+```bash
+npm run build -- --only main
+npm run build -- --list        # print installer names
+```
+
+Dependency installers are automatically prepended before your own source files.
 
 The compiler:
 - Collapses indented continuation lines into single-line commands
@@ -135,15 +146,99 @@ The compiler:
 - Passes `@@` comments and `think` lines through as-is
 - Executes `.js` / `.ts` helper scripts and appends their stdout
 
-**The output file is always `dist/installer.txt`.** This path is the standard across
-all projects using this template.
-
 ### Adding a new source file
 
 1. Create `src/<system>/my-feature.mush`
 2. Add `'<system>/my-feature.mush'` (or `'<system>/'` for all files in the dir) to
-   `MANIFEST` in `tools/build.ts` at the correct load position
+   the `manifest` array of the appropriate installer in `mush.json`
 3. Run `npm run build`
+
+---
+
+## Showcase
+
+The showcase runner lets you demo your softcode interactively against a live server —
+no test fixtures, no assertions, just real output. Useful for demos, debugging visual
+output, and end-to-end walkthroughs.
+
+```bash
+npm run showcase                     # interactive menu
+npm run showcase -- --list           # list available sections (no connection)
+npm run showcase -- my-section       # run one section, then menu
+npm run showcase -- --spin --deploy  # spin Docker, deploy, then menu
+```
+
+### How it works
+
+Each showcase section is a JSON file in `showcases/`. Register files in `mush.json`:
+
+```json
+{
+  "showcases": [
+    { "file": "showcases/hello-world.json" }
+  ]
+}
+```
+
+### Showcase file format
+
+```json
+{
+  "key":   "hello-world",
+  "label": "Hello world — basic UDF output",
+  "vars": {
+    "sys": "search(name=My System <tmpl.sys>)"
+  },
+  "steps": [
+    { "sub": "Basic eval" },
+    { "eval": "u({{sys}}/F.HELLO,{{player}})", "label": "+hello" },
+    { "sub": "Command with stored result" },
+    { "eval": "num(me)", "store": "wiz_dbref" },
+    { "command": "think {{wiz_dbref}}", "label": "wiz dbref" },
+    { "sub": "Reset player state" },
+    { "reset": true }
+  ]
+}
+```
+
+### Step types
+
+| Field | Purpose |
+|---|---|
+| `{ "sub": "text" }` | Print a sub-heading |
+| `{ "cmd": "text" }` | Print an informational line |
+| `{ "eval": "expr", "label": "..." }` | Run `wiz.eval(expr)` and show result |
+| `{ "eval": "expr", "store": "key" }` | Eval and store result in vars (silent) |
+| `{ "command": "cmd", "label": "..." }` | Run `wiz.command(cmd)` and show output |
+| `{ "reset": true }` | Wipe all `_*` attrs on the showcase player |
+| `{ "set_stats": "INT:6 REF:7 ..." }` | Set `_CG_STAT_*` attrs (chargen systems) |
+
+### Template tokens
+
+All `eval`, `command`, and `label` strings support `{{token}}` interpolation:
+
+| Token | Value |
+|---|---|
+| `{{player}}` | ShowcasePlayer dbref |
+| `{{key}}` | Any key declared in the file's `vars` block |
+| `{{key}}` | Any key stored by a prior `store` step |
+
+`vars` values are MUSH expressions evaluated at startup (e.g. `search(name=...)`).
+The result's dbref is extracted automatically; the full result is kept if no dbref
+is found (useful for non-dbref values).
+
+### CLI options
+
+| Flag | Purpose |
+|---|---|
+| `--spin` | Start a fresh Docker container |
+| `--deploy` | Deploy the first installer before running |
+| `--no-deploy` | Skip deploy even with `--spin` |
+| `--installer NAME` | Deploy a specific named installer |
+| `--host HOST` | MUSH host (default: `$RHOST_HOST` or `localhost`) |
+| `--port PORT` | MUSH port (default: `$RHOST_PORT` or `4201`) |
+| `--pass PASS` | Wizard password (default: `$RHOST_PASS` or `changeme`) |
+| `--list` | Print sections and exit, no connection needed |
 
 ---
 
